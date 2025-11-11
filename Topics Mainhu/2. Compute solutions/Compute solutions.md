@@ -1,4 +1,5 @@
 # Compute oplossingen in Azure
+Compute is het vermogen om programma’s uit te voeren, berekeningen te doen, en workloads te draaien. In Azure zijn er verschillende manieren om dat te doen, afhankelijk van je behoeften qua schaal, flexibiliteit, beheer en kosten.
 
 ## 🚀 Azure Container Apps
 **Geschikt voor:** Serverless microservices op basis van containers
@@ -45,6 +46,8 @@
 - Container Apps = ACI + schaalbaarheid + extra features
 
 **Functions vs Container Apps:**
+Functions: Ideaal voor: kleine, kortdurende taken die reageren op events.
+Azure Container Apps: Ideaal voor: algemene workloads, microservices, en complexere toepassingen.
 - Beide geschikt voor event-driven
 - Functions = korte taken
 - Container Apps = algemeen gebruik
@@ -59,11 +62,27 @@
 - **Functions:** 🟢 Consumption-based auto-scaling
 
 ### State Management
+State management verwijst naar het opslaan en beheren van data die je applicatie nodig heeft om te functioneren. 
 - **Container Apps:** 🔴 Stateless
 - **Container Instances:** 🔴 Stateless
 - **App Service:** 🟢 Stateless & stateful
 - **AKS:** 🟢 Stateless & stateful
 - **Functions:** 🔴 Stateless
+
+Voor Stateless services (Container Apps, Functions, ACI):
+
+❌ Geen lokale file storage
+❌ Geen session data in memory/disk
+✅ Gebruik externe storage (Blob, Cosmos DB, Redis)
+✅ Elke container instance is identiek
+✅ Makkelijker te schalen
+
+Voor Stateful services (App Service, AKS):
+
+✅ Lokale file storage mogelijk
+✅ Session data kan lokaal
+⚠️ Complexer om te schalen (data moet gesynchroniseerd)
+⚠️ Backup/restore belangrijker
 
 ### Resource Isolation
 - **Container Apps:** 🟡 Shared
