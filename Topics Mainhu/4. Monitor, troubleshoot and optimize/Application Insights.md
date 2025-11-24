@@ -37,6 +37,21 @@ Hier zijn verschillende methoden om te beginnen met het monitoren en analyseren 
 
 ## Metrics
 
+**Wat zijn Metrics?**
+
+Metrics zijn **meetbare getallen** die je applicatie continu verzamelt. Denk aan metrics als de snelheidsmeter en temperatuurmeter in je auto - ze laten in één oogopslag zien hoe het gaat.
+
+**Voorbeelden van metrics**:
+- 🚀 **Aantal requests per minuut**: hoeveel bezoekers komen er op je website?
+- ⏱️ **Gemiddelde response tijd**: hoe snel reageert je app? (bijv. 250 milliseconden)
+- ❌ **Aantal errors per uur**: hoeveel fouten treden er op? (bijv. 5 errors)
+- 💾 **Geheugengebruik**: hoeveel RAM gebruikt je app? (bijv. 512 MB)
+- 🔄 **CPU gebruik**: hoe druk is de processor? (bijv. 45%)
+
+**Simpel gezegd**: Metrics zijn de cijfers die je in grafieken ziet in Azure Portal, zoals "je app had 1000 bezoekers vandaag" of "de gemiddelde response tijd is 2 seconden".
+
+### Twee Soorten Metrics
+
 **Log-based metrics**: Biedt grondige data analyse en diagnostiek. ⭐: je hebt een complete set van events nodig ❌: high-volume apps die sampling / filtering vereisen.
 
 **Standard metrics** zijn tijdreeks data **vooraf geaggregeerd** door ofwel SDK (versie heeft geen invloed op nauwkeurigheid) of backend (betere nauwkeurigheid), geoptimaliseerd voor snelle queries. ⭐: dashboards en real-time alerts, use cases _die sampling of filtering vereisen_.
