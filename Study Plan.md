@@ -12,10 +12,10 @@
 
 1. Develop for Azure storage
 
-   - [Blob Storage](./Topics/Blob%20Storage.md)
+   - [Blob Storage](./Topics/Bllob%20Storage.md)
    - [Cosmos DB](./Topics/Cosmos%20DB.md)
 
-1. Implement Azure security
+1. Implement Azure security (deze heeft nog wat aandacht nodig)
 
    - [Managed Identities](./Topics/Managed%20Identities.md)
    - [Entra ID](./Topics/Entra%20ID.md)
