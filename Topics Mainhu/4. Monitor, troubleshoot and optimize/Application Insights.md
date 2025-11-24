@@ -49,9 +49,17 @@ Je kunt schakelen tussen deze metrics types met behulp van de namespace selector
 
 Vermindert dataverkeer en kosten terwijl de analyse nauwkeurig blijft. Helpt data limieten te voorkomen en maakt diagnostiek gemakkelijker. Hoge sampling rates (> 60%) kunnen de nauwkeurigheid van log-based metrics beïnvloeden. Vooraf geaggregeerde metrics in SDKs lossen dit probleem op, maar te veel filtering kan alerts missen.
 
-- **Adaptive sampling**: Standaard ingeschakeld, past data volume aan om binnen ingestelde limieten te blijven. Gebruikt in Azure Functions.
-- **Fixed-rate sampling**: Je stelt het percentage handmatig in. ⭐: synchroniseren van client en server data voor onderzoeken van gerelateerde events.
-- **Ingestion sampling**: Verwijdert data op het service endpoint om binnen maandelijkse limieten te blijven. Vermindert app verkeer niet. Gebruik als je maandelijkse limieten bereikt, of te veel data krijgt, of een oudere SDK gebruikt.
+**Simpel uitgelegd**: Stel je hebt een drukke webshop. In plaats van elke klik en elke paginaweergave op te slaan, kies je ervoor om maar 10% van alle gebeurtenissen te bewaren. Zo houd je de kosten laag, maar zie je nog steeds trends en problemen.
+
+#### Soorten Sampling
+
+- **Adaptive sampling**: Automatische sampling waarbij Application Insights het aantal te verzamelen telemetrie dynamisch aanpast op basis van de hoeveelheid verkeer. Bij veel verkeer wordt meer data weggelaten, bij weinig verkeer wordt meer data opgeslagen. Dit voorkomt overbelasting en hoge kosten. Standaard ingeschakeld, gebruikt in Azure Functions.
+
+- **Fixed-rate sampling**: Hierbij stel je zelf een vast percentage in van de telemetrie die wordt opgeslagen (bijvoorbeeld 10%). Ongeacht het verkeer wordt altijd dat percentage bewaard. ⭐: synchroniseren van client en server data voor onderzoeken van gerelateerde events.
+
+- **Ingestion sampling**: Een vorm van sampling waarbij slechts een deel van de telemetriegegevens wordt opgeslagen op het moment dat ze binnenkomen in Application Insights. Bepaalt bij binnenkomst welke data wordt opgeslagen (kan adaptief of vast zijn). Dit betekent dat niet alle data wordt bewaard, maar bijvoorbeeld slechts 10% van alle inkomende events, traces of requests. Gebruik als je maandelijkse limieten bereikt, of te veel data krijgt, of een oudere SDK gebruikt.
+
+- **Configure sampling overrides**: Hiermee kun je uitzonderingen instellen op de sampling-regels. Bijvoorbeeld: bepaalde typen telemetrie (zoals errors of requests van een specifieke gebruiker) altijd opslaan, ongeacht de ingestelde sampling.
 
 Voor web apps, om custom events te groeperen, gebruik dezelfde `OperationId` waarde.
 
@@ -69,6 +77,124 @@ builder.UseSampling(10.0); // percentage
 // Als je andere telemetry processors hebt:
 builder.Use((next) => new AnotherProcessor(next));
 ```
+
+## Telemetry Pipeline Componenten
+
+De telemetry pipeline bestaat uit verschillende componenten die je helpen om data aan te passen voordat het naar Application Insights wordt verstuurd.
+
+### Telemetry Initializer
+
+**Wat doet het?** Voegt extra informatie toe aan elk telemetry item voordat het wordt verstuurd.
+
+**Simpel uitgelegd**: Je wilt bij elke foutmelding in je app ook de gebruikersnaam meesturen. Met een telemetry initializer voeg je die gebruikersnaam toe aan elk telemetry-item voordat het naar Application Insights gaat.
+
+**Voorbeeld**:
+```cs
+public class CustomTelemetryInitializer : ITelemetryInitializer
+{
+    public void Initialize(ITelemetry telemetry)
+    {
+        // Voeg gebruikersnaam toe aan alle telemetry
+        telemetry.Context.User.Id = "jan.jansen@bedrijf.nl";
+        
+        // Voeg custom property toe
+        if (telemetry is ISupportProperties propTelemetry)
+        {
+            propTelemetry.Properties["Environment"] = "Production";
+            propTelemetry.Properties["ApplicationVersion"] = "2.1.0";
+        }
+    }
+}
+
+// Registreer in Startup.cs
+services.AddApplicationInsightsTelemetry();
+services.AddSingleton<ITelemetryInitializer, CustomTelemetryInitializer>();
+```
+
+### Telemetry Processor
+
+**Wat doet het?** Filtert of wijzigt telemetry data voordat het wordt verstuurd. Je kunt bepaalde data eruit halen of aanpassen.
+
+**Simpel uitgelegd**: Je wilt geen telemetrie van testgebruikers opslaan. Met een telemetry processor filter je alle data van testgebruikers eruit, zodat die niet in Application Insights terechtkomt.
+
+**Voorbeeld**:
+```cs
+public class FilterTestUsersTelemetryProcessor : ITelemetryProcessor
+{
+    private ITelemetryProcessor Next { get; set; }
+
+    public FilterTestUsersTelemetryProcessor(ITelemetryProcessor next)
+    {
+        this.Next = next;
+    }
+
+    public void Process(ITelemetry item)
+    {
+        // Filter telemetry van testgebruikers
+        if (item is RequestTelemetry request && 
+            request.Context.User.Id.StartsWith("test_"))
+        {
+            // Blokkeer deze telemetry (stuur niet door)
+            return;
+        }
+
+        // Filter health check requests
+        if (item is RequestTelemetry req && 
+            req.Url.AbsolutePath.Contains("/health"))
+        {
+            return;
+        }
+
+        // Stuur door naar de volgende processor in de chain
+        this.Next.Process(item);
+    }
+}
+
+// Registreer in Startup.cs
+services.AddApplicationInsightsTelemetryProcessor<FilterTestUsersTelemetryProcessor>();
+```
+
+### Telemetry Channel
+
+**Wat doet het?** Bepaalt hoe de telemetry data wordt verstuurd naar Application Insights.
+
+**Simpel uitgelegd**: Je app verzamelt telemetrie en stuurt die via het telemetry channel naar Application Insights. Je kunt bijvoorbeeld instellen dat de data eerst lokaal wordt opgeslagen en pas later wordt verstuurd als er weer internet is.
+
+**Twee hoofdtypen**:
+
+1. **InMemoryChannel**: Stuurt direct, geen persistentie (data verloren bij crash)
+2. **ServerTelemetryChannel**: Buffert lokaal, stuurt asynchroon, betrouwbaarder
+
+**Voorbeeld**:
+```cs
+// Configureer channel in Program.cs
+services.AddApplicationInsightsTelemetry(options =>
+{
+    options.ConnectionString = "InstrumentationKey=...";
+});
+
+services.Configure<TelemetryConfiguration>(config =>
+{
+    // Gebruik ServerTelemetryChannel met lokale opslag
+    var channel = new ServerTelemetryChannel
+    {
+        StorageFolder = @"C:\TelemetryCache",
+        MaxTelemetryBufferCapacity = 1000,
+        // Verstuur elke 30 seconden of bij 500 items
+        FlushIntervalInMilliseconds = 30000
+    };
+    
+    config.TelemetryChannel = channel;
+});
+```
+
+### Kortom
+
+- **Sampling** = minder data opslaan (kostenreductie)
+- **Initializer** = extra info toevoegen (verrijken)
+- **Processor** = data filteren of verwijderen (opschonen)
+- **Channel** = data verzenden (transport)
+
 
 ## [Custom events en metrics](https://learn.microsoft.com/en-us/azure/azure-monitor/app/api-custom-events-metrics#getmetric)
 
@@ -156,6 +282,98 @@ Lees meer: [Dependency tracking in Application Insights](https://learn.microsoft
 
 - **Auto instrumentation**: Telemetry collectie via configuratie zonder de applicatiecode te wijzigen of instrumentation te configureren.
 - **Manual Instrumentation**: Coderen tegen de **Application Insights** of **OpenTelemetry** API. Ondersteunt **Entra ID** en **Complex Tracing** (verzamel data die niet beschikbaar is in Application Insights)
+
+## Azure Monitor Componenten
+
+### Azure Monitor Logs
+
+**Wat doet het?** Verzamelt en analyseert loggegevens van je Azure-resources, zoals foutmeldingen en activiteiten.
+
+Je kunt Kusto queries (KQL) schrijven om door je logs te zoeken en patronen te vinden. Bijvoorbeeld: zoek naar alle errors van de laatste 24 uur.
+
+### Azure Monitor Metrics
+
+**Wat doet het?** Meet en bewaakt numerieke waarden (zoals CPU-gebruik, geheugen, aantal requests) van je resources in real-time.
+
+Metrics zijn getallen die automatisch worden verzameld, zoals:
+- Hoeveel requests per minuut
+- Gemiddelde response tijd
+- Percentage CPU gebruik
+- Hoeveel geheugen wordt gebruikt
+
+### Application Insights Alerts
+
+**Wat doet het?** Stuurt meldingen als er afwijkingen of problemen worden gedetecteerd in je applicatie, bijvoorbeeld bij fouten of trage responstijden.
+
+Je kunt bijvoorbeeld instellen:
+- "Stuur een email als de response tijd > 3 seconden"
+- "Stuur een SMS als er > 10 errors per minuut zijn"
+- "Trigger een Azure Function als de app niet beschikbaar is"
+
+### Application Insights Web Tests
+
+**Wat doet het?** Simuleert gebruikersacties op je website om te controleren of deze bereikbaar en snel is, en waarschuwt bij problemen.
+
+Er zijn verschillende soorten tests (zie Availability test sectie hieronder voor details).
+
+## Proactieve Detectie van Problemen
+
+### Smart Detection ✅ (Aanbevolen voor automatische waarschuwing)
+
+**Wat doet het?** Gebruikt machine learning om automatisch prestatieproblemen en afwijkingen in je web app te detecteren en je te waarschuwen.
+
+**Waarom kiezen voor Smart Detection?**
+- ✅ Detecteert automatisch afwijkingen zonder configuratie
+- ✅ Leert normale patronen en waarschuwt bij afwijkingen
+- ✅ Detecteert verschillende problemen: trage response times, failure rate spikes, memory leaks
+- ✅ Stuurt proactieve waarschuwingen
+- ✅ Geen extra setup vereist
+
+**Voorbeelden van wat het detecteert**:
+- Plotselinge toename van errors
+- Ongewoon trage response times
+- Degradatie in prestaties
+- Memory leaks
+- Abnormale afhankelijkheden
+
+### Snapshot Debugger ❌ (Niet voor automatische detectie)
+
+**Wat doet het?** Legt de status van je applicatie vast op het moment van een fout (snapshot), zodat je kunt debuggen.
+
+**Waarom NIET voor automatische waarschuwing?**
+- ❌ Wordt gebruikt voor debugging, niet voor detectie
+- ❌ Je moet handmatig naar snapshots kijken
+- ❌ Reageert alleen op exceptions die al zijn opgetreden
+- ✅ Wel handig: zie exacte variabele waarden en call stack op moment van crash
+
+### Profiler ❌ (Niet voor automatische detectie)
+
+**Wat doet het?** Analyseert de prestaties van je web app door gedetailleerde performance metrics te verzamelen.
+
+**Waarom NIET voor automatische waarschuwing?**
+- ❌ Verzamelt alleen data, waarschuwt niet automatisch
+- ❌ Je moet handmatig de profiling resultaten bekijken
+- ❌ Focus op performance analyse, niet op proactieve detectie
+- ✅ Wel handig: zie welke code het langzaamst is (welke methods nemen de meeste tijd)
+
+### Multi-step Test ❌ (Niet voor automatische detectie)
+
+**Wat doet het?** Test de beschikbaarheid en responsiviteit van je applicatie door een reeks stappen uit te voeren (synthetic transactions).
+
+**Waarom NIET voor automatische detectie van performance problemen?**
+- ❌ Test alleen beschikbaarheid, niet prestatieproblemen
+- ❌ Voert vooraf gedefinieerde scripts uit
+- ❌ Detecteert geen afwijkingen in normaal verkeer
+- ✅ Wel handig: test complete user journeys (login → winkelwagen → checkout)
+
+### Vergelijking
+
+| Feature          | Automatische Detectie | Waarschuwt Proactief | Use Case                          |
+| ---------------- | --------------------- | -------------------- | --------------------------------- |
+| Smart Detection  | ✅ Ja                 | ✅ Ja                | Automatisch problemen ontdekken   |
+| Snapshot Debugger| ❌ Nee                | ❌ Nee               | Debuggen van crashes              |
+| Profiler         | ❌ Nee                | ❌ Nee               | Performance analyse               |
+| Multi-step Test  | ❌ Nee                | ⚠️ Alleen bij tests  | Availability monitoring           |
 
 ## [Availability test](https://learn.microsoft.com/en-us/azure/azure-monitor/app/troubleshoot-availability)
 
