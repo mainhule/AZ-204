@@ -46,7 +46,7 @@ Metrics zijn **meetbare getallen** die je applicatie continu verzamelt. Denk aan
 - ⏱️ **Gemiddelde response tijd**: hoe snel reageert je app? (bijv. 250 milliseconden)
 - ❌ **Aantal errors per uur**: hoeveel fouten treden er op? (bijv. 5 errors)
 - 💾 **Geheugengebruik**: hoeveel RAM gebruikt je app? (bijv. 512 MB)
-- 🔄 **CPU gebruik**: hoe druk is de processor? (bijv. 45%)
+- 🔄 **CPU gebruik**: hoe druk is de processor? (bijv. 45%) . Om CPU te monitoren moet je altijd de app service plan selecteren
 
 **Simpel gezegd**: Metrics zijn de cijfers die je in grafieken ziet in Azure Portal, zoals "je app had 1000 bezoekers vandaag" of "de gemiddelde response tijd is 2 seconden".
 
