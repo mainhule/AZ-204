@@ -573,3 +573,195 @@ public class ActivityFilteringProcessor : BaseProcessor<Activity>
     }
 }
 ```
+
+## ⚠️ Belangrijke Edge Cases en Valkuilen
+
+Deze sectie bevat veelgemaakte fouten en edge cases die belangrijk zijn voor het AZ-204 examen.
+
+### 1. CPU Monitoring - App Service Plan vs App Service
+
+**❌ Fout**: CPU metrics proberen te vinden bij de App Service resource
+**✅ Juist**: Om CPU te monitoren moet je **altijd de App Service Plan** selecteren, niet de App Service zelf
+
+**Waarom?** Meerdere apps kunnen op hetzelfde App Service Plan draaien en delen dezelfde CPU resources. De CPU metrics zijn daarom op plan-niveau, niet per app.
+
+```
+Azure Portal > App Service Plan > Monitoring > Metrics > CPU Percentage
+```
+
+### 2. Activity Log vs Application Insights Telemetry
+
+**❌ Fout**: Proberen Application Insights telemetry data te zien via `az monitor activity-log`
+**✅ Juist**: Activity Log toont alleen **resource management operaties** (wie heeft wat aangepast)
+
+**Verschil**:
+- **Activity Log**: Resource-level events (VM gestart, web app geschaald, resource verwijderd)
+- **Application Insights**: Applicatie-level telemetry (requests, exceptions, custom events)
+
+### 3. Availability Tests - DNS Vereisten
+
+**❌ Fout**: Availability tests gebruiken voor interne/private endpoints
+**✅ Juist**: URL ping tests werken alleen met **publiek toegankelijke endpoints** met DNS
+
+**Waarom?** Availability tests draaien vanaf Azure datacenters en hebben publieke DNS nodig.
+
+**Oplossing voor private endpoints**: Gebruik **Custom TrackAvailability tests** die binnen je netwerk draaien.
+
+### 4. Sampling en Accurate Counts
+
+**❌ Fout**: Verwachten dat je exact aantal events kunt tellen met sampling aan
+**✅ Juist**: Met sampling krijg je **schattingen**, niet exacte getallen
+
+**Voorbeeld**: Met 10% sampling en 95 events in Application Insights betekent dit ~950 echte events (schatting).
+
+**Oplossing**: Gebruik **Standard (pre-aggregated) metrics** voor accurate counts, die zijn niet beïnvloed door sampling.
+
+### 5. Connection String vs Instrumentation Key
+
+**⚠️ Belangrijk**: Instrumentation Key is **legacy** (verouderd)
+**✅ Gebruik altijd**: Connection String (nieuwer en flexibeler)
+
+```cs
+// ❌ Oud (nog wel ondersteund)
+configuration.InstrumentationKey = "abc-123";
+
+// ✅ Nieuw (aanbevolen)
+configuration.ConnectionString = "InstrumentationKey=abc-123;IngestionEndpoint=https://...";
+```
+
+### 6. Live Metrics - Privacy en Security
+
+**❌ Fout**: Denken dat Live Metrics automatisch alle data toont
+**✅ Juist**: Live Metrics filtert automatisch **PII (Personally Identifiable Information)**
+
+**Belangrijk**: Live Metrics toont alleen aggregated data, geen individuele request details met user info (tenzij je dit expliciet configureert).
+
+### 7. Application Map - Single Resource Vereiste
+
+**❌ Fout**: Microservices naar verschillende Application Insights resources sturen
+**✅ Juist**: Alle componenten moeten naar **dezelfde Application Insights resource** voor een complete map
+
+**Waarom?** Application Map kan alleen dependencies visualiseren binnen één resource.
+
+**Oplossing**: Gebruik `cloud_RoleName` om verschillende services te onderscheiden binnen één resource.
+
+### 8. Retention Period - Data Verlies
+
+**⚠️ Belangrijk**: Default retention is **90 dagen**
+**❌ Fout**: Verwachten dat oude data altijd beschikbaar blijft
+**✅ Juist**: Configureer langere retention (tot 730 dagen) of export naar Storage
+
+```
+Portal > Application Insights > Usage and estimated costs > Data Retention
+```
+
+### 9. Telemetry Initializer vs Processor - Volgorde
+
+**Belangrijk**: De **volgorde** waarin deze worden uitgevoerd:
+
+```
+1. Telemetry Initializer (verrijken)
+   ↓
+2. Telemetry Processor (filteren)
+   ↓
+3. Sampling (verminderen)
+   ↓
+4. Telemetry Channel (verzenden)
+```
+
+**❌ Fout**: Denken dat sampling gebeurt vóór filtering
+**✅ Juist**: Filtering (processor) gebeurt **vóór** sampling
+
+### 10. Multi-Step Tests - Deprecated
+
+**⚠️ Belangrijke update**: Multi-step web tests (met .webtest bestanden) zijn **deprecated**
+**✅ Alternatief**: Gebruik **Standard tests** of **TrackAvailability** met Azure Functions
+
+### 11. Smart Detection - Email Notificaties
+
+**❌ Fout**: Verwachten dat Smart Detection automatisch emails stuurt naar iedereen
+**✅ Juist**: Smart Detection stuurt emails alleen naar:
+- Subscription Owners
+- Subscription Contributors
+- Expliciet geconfigureerde Action Groups
+
+**Configuratie nodig**: Stel Action Groups in voor custom notificaties (Teams, SMS, webhook, etc.)
+
+### 12. Profiler en Snapshot Debugger - Tier Requirements
+
+**❌ Fout**: Proberen Snapshot Debugger te gebruiken op Free/Shared tier
+**✅ Juist**: Deze features vereisen minimaal **Basic tier** of hoger
+
+| Feature           | Minimum Tier | Notes                        |
+| ----------------- | ------------ | ---------------------------- |
+| Profiler          | Basic        | Production profiling         |
+| Snapshot Debugger | Basic        | Debug production exceptions  |
+| Always On         | Basic        | Voorkomt cold starts         |
+
+### 13. Kusto Query Limits
+
+**⚠️ Belangrijk**: Kusto queries hebben **limieten**:
+- Max 10,000 rijen per query (gebruik `take` of `limit`)
+- 4 minuten timeout voor complexe queries
+- Geheugen limiet van 64 MB per query
+
+**❌ Fout**: Query zonder `take` op miljoen records
+```kusto
+requests // kan timeout geven
+```
+
+**✅ Juist**: Gebruik `take` of aggregaties
+```kusto
+requests 
+| take 1000 // of gebruik summarize
+
+requests 
+| summarize count() by resultCode // aggregatie
+```
+
+### 14. HTTPS Requirement voor Connection String
+
+**⚠️ Security**: Connection strings kunnen in plain text staan in configuratie
+**✅ Best practice**: Gebruik **Azure Key Vault** of **Managed Identity** voor connection strings
+
+```cs
+// ❌ Niet veilig
+var connectionString = "InstrumentationKey=abc-123..."; // hardcoded
+
+// ✅ Veilig
+var connectionString = builder.Configuration["ApplicationInsights:ConnectionString"]; // uit Key Vault
+```
+
+### 15. Correlation Context in Distributed Systems
+
+**❌ Fout**: Verwachten dat distributed tracing automatisch werkt zonder headers
+**✅ Juist**: HTTP calls moeten **correlation headers** doorsturen
+
+Application Insights SDK doet dit automatisch voor:
+- HttpClient calls
+- Entity Framework queries
+- Azure SDK calls
+
+**Handmatig toevoegen** voor custom HTTP calls:
+```cs
+var operation = telemetryClient.StartOperation<RequestTelemetry>("MyOperation");
+// Operation ID wordt automatisch in headers gezet
+```
+
+### Samenvatting Exam Tips
+
+1. ✅ CPU monitoring: **App Service Plan**, niet App Service
+2. ✅ Activity Log ≠ Application Insights telemetry
+3. ✅ Availability tests: publieke endpoints vereist
+4. ✅ Sampling: schattingen, geen exacte counts
+5. ✅ Gebruik **Connection String**, niet Instrumentation Key
+6. ✅ Application Map: één resource voor alle componenten
+7. ✅ Default retention: 90 dagen
+8. ✅ Pipeline volgorde: Initializer → Processor → Sampling → Channel
+9. ✅ Multi-step tests zijn deprecated
+10. ✅ Smart Detection emails: configureer Action Groups
+11. ✅ Profiler/Snapshot: Basic tier minimum
+12. ✅ Kusto queries: gebruik `take` of aggregaties
+13. ✅ Connection strings: gebruik Key Vault
+14. ✅ Distributed tracing: correlation headers automatisch
+15. ✅ Standard metrics zijn niet beïnvloed door sampling
