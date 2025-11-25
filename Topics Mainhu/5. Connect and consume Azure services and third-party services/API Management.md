@@ -83,6 +83,8 @@ Opmerking: Als client een response verwacht in een bepaald formaat (voorbeeld: X
 ### [Named values](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-properties?tabs=azure-cli)
 
 Voeg een named value toe: `Dashboard > API Management Services > service > Named values`
+Dit is eigenlijk een sleutel/waarde-paar voor configuratie in Azure API Management. 
+Je gebruikt het om centrale, herbruikbare instellingen op te slaan, zoals URLs, omgevingsnamen, headers of secrets, zodat je ze makkelijk en veilig in policies kunt toepassen.
 
 **Types:**
 
